@@ -1,0 +1,121 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2014, Mayo Clinic
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+#
+# Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+#     Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#     Neither the name of the <ORGANIZATION> nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+# OF THE POSSIBILITY OF SUCH DAMAGE.
+import argparse
+import sys
+
+from utils.Proxy import Proxy
+
+
+def _validchangeset(opts, urlproxy):
+    if not opts.changeset:
+        print("Must suppy an changeset UUID or name", file=sys.stderr)
+        return False
+    r = urlproxy.get('changeset/%s' % opts.changeset)
+    if not r.ok:
+        print("Changeset does not exist")
+        return False
+    if int(r.ChangeSetReferenceSetEntry.isFinal):
+        print("Cannot change a finalized change set", file=sys.stderr)
+        return False
+    return True
+
+
+def add(opts, urlproxy):
+    if opts.changeset:
+        print("Changeset identifier cannot be specified for a new changeset", file=sys.stderr)
+        sys.exit(1)
+    if opts.name:
+        r = urlproxy.get('changeset/%s' % opts.name)
+        if r.ok:
+            print("Changeset named %s already exists!" % opts.name, file=sys.stderr)
+            sys.exit(1)
+    r = urlproxy.post('changeset', csname=opts.name, description=opts.description, owner=opts.owner)
+    if r.ok:
+        urlproxy.changeset = r.ChangeSetReferenceSetEntry.referencedComponentId.uuid
+    else:
+        print("Changeset creation failed", file=sys.stderr)
+        sys.exit(1)
+    print("New changeset created: %s" % urlproxy.changeset + (' (%s)' % opts.name if opts.name else ''))
+
+
+def rollback(opts, urlproxy):
+    if not _validchangeset(opts, urlproxy):
+        sys.exit(1)
+    if urlproxy.rollback(force=True):
+        print("Change set successfully rolled back")
+    else:
+        print("Roll back failed")
+
+
+def commit(opts, urlproxy):
+    if not _validchangeset(opts, urlproxy):
+        sys.exit(1)
+    if urlproxy.commit(force=True):
+        print("Change set successfully committed")
+    else:
+        print("Commit failed")
+
+
+
+def main(args):
+    """ Query or change the state of a change set
+    """
+    parser = argparse.ArgumentParser(description="Manage change sets")
+    parser.add_argument('function', help="[a]dd, [m]odify, [c]ommit, [r]roolback, [q]uery", choices=('a','c','m', 'q', 'r'))
+    parser.add_argument('-u', '--url', help="RF2 Service base URL", required=True)
+    parser.add_argument('-n', '--name', help="Change set name")
+    parser.add_argument('-d', '--description', help="Change set description")
+    parser.add_argument('-o', '--owner', help="Change set owner")
+    parser.add_argument('-e', '--effectivetime', help="Effective time of addition.  Default: today's date")
+    parser.add_argument('-cs', '--changeset', help="Changeset identifier")
+    parser.add_argument('--debug', help="Debugging", action='store_true')
+
+    opts = parser.parse_args(args)
+    
+    urlproxy = Proxy(opts.url, opts.changeset, opts.effectivetime, opts.debug)
+    if not urlproxy.ok:
+        print("Invalid URL: %s" % opts.url, file=sys.stderr)
+        sys.exit(1)
+    
+    if opts.function == 'a':
+        add(opts, urlproxy)
+    elif opts.function == 'c':
+        commit(opts, urlproxy)
+    elif opts.function == 'm':
+        print("Modify changeset not implemented")
+    elif opts.function == 'q':
+        print("Query changeset not implemented")
+    elif opts.function == 'r':
+        rollback(opts, urlproxy)
+    else:
+        print("Unrecognized function")
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])

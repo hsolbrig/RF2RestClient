@@ -1,0 +1,128 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2014, Mayo Clinic
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+#
+# Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+# Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#     Neither the name of the <ORGANIZATION> nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+# OF THE POSSIBILITY OF SUCH DAMAGE.
+
+""" Add a new concept using the REST services
+"""
+import sys
+import argparse
+
+from utils.Proxy import Proxy
+
+
+def main(args):
+    parser = argparse.ArgumentParser(description="Add a new concept to a RF2 database")
+    parser.add_argument('-u', '--url', help="RF2 Service base URL")
+    parser.add_argument('-n', '--name', help="Concept name", required=True)
+    parser.add_argument('-p', '--parent', help="Parent concept id", required=True)
+    parser.add_argument('-d', '--description', help="Concept description")
+    parser.add_argument('-c', '--changeset', help="Changeset identifier. Default: assign new identifier")
+    parser.add_argument('-e', '--effectivetime', help="Effective time of addition.  Default: today's date")
+    parser.add_argument('-o', '--override', help="Ignore existing concept with the same name", action='store_true')
+    parser.add_argument('-s', '--conceptstatus', help="Primitive(p) or fully defined (f)", choices=('f', 'p'),
+                        default='p')
+    opts = parser.parse_args(args)
+
+    # Make sure the url is valid and points at a RF2 service
+    urlproxy = Proxy(opts.url, opts.changeset, opts.effectivetime)
+    if not urlproxy.ok:
+        print("Invalid URL: %s" % opts.url, file=sys.stderr)
+        sys.exit(1)
+
+    # Make sure the parent concept is valid
+    if not urlproxy.get('concept/%s' % opts.parent).Concept.id:
+        print("Invalid parent concept: %s" % opts.parent, file=sys.stderr)
+        sys.exit(1)
+
+    # Create the FSN from the name and the base
+    fsn = opts.name + ' ' + urlproxy.get('concept/%s/base' % opts.parent).val
+
+    # Make sure FSN doesn't already exist
+    r = urlproxy.get('descriptions/', matchalgorithm='exactmatch', matchvalue=fsn, maxtoreturn=0)
+    if not r.ok:
+        sys.exit(1)
+    if int(r.DescriptionList.numEntries) > 0:
+        print("Concept with the FSN of %s already exists" % fsn, file=sys.stderr)
+        sys.exit(1)
+
+    # Make sure the name doesn't already exist
+    if not opts.override:
+        r = urlproxy.get('descriptions/', matchalgorithm='exactmatch', matchvalue=opts.name, maxtoreturn=0)
+        if not r.ok:
+            sys.exit(1)
+        if int(r.DescriptionList.numEntries) > 0:
+            print("Concept with the same name (%s) already exists - use override flag to add" % opts.name,
+                  file=sys.stderr)
+            sys.exit(1)
+
+    # Validate the changeset or create a new one if needed
+    urlproxy.establish_changeset()
+    if not urlproxy.ok:
+        print("Changeset is not valid", file=sys.stderr)
+        sys.exit(1)
+
+    # Add the concept
+    r = urlproxy.post('concept', effectiveTime=effectivetime, definitionstatus=opts.conceptstatus)
+    if not r.ok:
+        print("Unable to add concept", file=sys.stderr)
+        sys.exit(1)
+    conceptid = r.Concept.id
+
+    # Add the two names
+    r = urlproxy.post('description', concept=conceptid, term=opts.name, type='p')
+    pnid = r.Description.id if r.ok else None
+    r = urlproxy.post('description', concept=conceptid, term=fsn, type='f')
+    fsnid = r.Description.id if r.ok else None
+
+    # Add the decription/definition if present
+    if opts.description:
+        r = urlproxy.post('description', concept=conceptid, term=opts.description, type='d')
+        descid = r.Description.id if r.ok else None
+
+    # add the parent
+    r = urlproxy.post('relationship/source/%s/target/%s' % (conceptid, opts.parent))
+    relid = r.Relationship.id if r.ok else None
+    if pnid and fsnid and relid (not opts.description or descid):
+        print("Concept succesfully created")
+        cs = urlproxy.commit()
+        if cs:
+            print("Changeset: %s committed" % cs, file=sys.stderr)
+    else:
+        urlproxy.rollback()
+        if not pnid:
+            print("Preferred name creation failed", file=sys.stderr)
+        if not fsnid:
+            print("Fully specified name creation failed", file=sys.stderr)
+        if not relid:
+            print("Parent relationship creation failed", file=sys.stderr)
+        if opts.description and not descid:
+            print("Definition creation failed", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
