@@ -109,12 +109,12 @@ class Proxy():
             return self.delete('changeset/%s' % self.changeset)
             # TODO manually undo the changes if we can't use the rollback mechanism
 
-    def _urlfor(self, root):
+    def _urlfor(self, root, format='json'):
         """ URL constructor
         @param root: base URL
         @return:
         """
-        rval = self._url + '/' + root + "?format=json" + \
+        rval = self._url + '/' + root + "?format=" + format + \
                (('&effectiveTime=%s' % self._effectivetime) if self._effectivetime else '') + \
             (('&changeset=%s' % self.changeset) if self.changeset else '')
         if self._debugging:
@@ -125,7 +125,7 @@ class Proxy():
     def _camelcase(text):
         return ''.join(x.capitalize() for x in text.split(' '))
 
-    def _doaccess(self, op, root, **args):
+    def _doaccess(self, op, root, format='json', **args):
         """ REST access with error handling
         @param op: requests function to invoke
         @param root: root URL
@@ -133,7 +133,8 @@ class Proxy():
         @return: JSON wrapper
         """
         try:
-            return self._rslt(op(self._urlfor(root), params=args))
+            response = op(self._urlfor(root, format=format), params=args)
+            return self._rslt(response) if format=="json" else response.content.decode()
         except requests.ConnectionError as e:
             print(str(e), file=sys.stderr)
             return self._rslt(None)

@@ -26,27 +26,36 @@
 # LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
+import zipfile
+from io import BytesIO
 
 
-class Struct:
-    """ Represent a dictionary as a first class python object
-    """
-    def __init__(self, debugging=False, **args):
-        if debugging:
-            print(str(args.items()))
-        for k, v in args.items():
-            self.__dict__[k] = \
-                Struct(**v) if isinstance(v, dict) else \
-                [Struct(**e) if isinstance(e, dict) else e for e in v] if \
-                    isinstance(v, (list, tuple)) and not isinstance(v, str) else \
-                v
+class InMemoryZip(object):
+    def __init__(self):
+        self.in_memory_zip = BytesIO()
 
-    @property
-    def d(self):
-        return self.__dict__
+    def addfile(self, filename, file_contents):
+        zf = zipfile.ZipFile(self.in_memory_zip, "a", zipfile.ZIP_DEFLATED, False)
+        zf.writestr(filename, file_contents)
+        # Mark the files as having been created on Windows so that
+        # Unix permissions are not inferred as 0000
+        for zfile in zf.filelist:
+            zfile.create_system = 0
+        return self
 
-    def __str__(self):
-        return str(self.__dict__)
+    def read(self):
+        self.in_memory_zip.seek(0)
+        return self.in_memory_zip.read()
 
-    def __repr__(self):
-        return repr(self.__dict__)
+    def writetofile(self, filename):
+        ''' Writes the in-memory zip to a file. '''
+        with open(filename, 'wb') as f:
+            f.write(self.read())
+
+
+
+if __name__ == "__main__":
+    # Run a test
+    imz = InMemoryZip()
+    imz.append("test.txt", "t1\tt2\tt3\t\na\tb\tc\t").append("test2.txt", "Still another")
+    imz.writetofile("test.zip")
