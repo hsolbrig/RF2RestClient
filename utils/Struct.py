@@ -8,8 +8,8 @@
 # Redistributions of source code must retain the above copyright notice, this
 # list of conditions and the following disclaimer.
 #
-#     Redistributions in binary form must reproduce the above copyright notice,
-#     this list of conditions and the following disclaimer in the documentation
+# Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
 #     and/or other materials provided with the distribution.
 #
 #     Neither the name of the <ORGANIZATION> nor the names of its contributors
@@ -31,15 +31,15 @@
 class Struct:
     """ Represent a dictionary as a first class python object
     """
+
     def __init__(self, debugging=False, **args):
         if debugging:
             print(str(args.items()))
         for k, v in args.items():
             self.__dict__[k] = \
                 Struct(**v) if isinstance(v, dict) else \
-                [Struct(**e) if isinstance(e, dict) else e for e in v] if \
-                    isinstance(v, (list, tuple)) and not isinstance(v, str) else \
-                v
+                    [Struct(**e) if isinstance(e, dict) else e for e in v] if \
+                        isinstance(v, (list, tuple)) and not isinstance(v, str) else v
 
     @property
     def d(self):
