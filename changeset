@@ -83,19 +83,21 @@ def as_concept(urlproxy, cid):
     return urlproxy.get('concept/%s' % cid, format="tsv")
 
 
-def create_zip(zipfile, filename, urlroot, entrylist, urlproxy, opts):
+def create_zip(zipfile, filename, urlroot, entrylist, urlproxy):
     if not entrylist:
         return
     data = urlproxy.get(urlroot + '/' + entrylist[0].id, format="tsv")
     for e in entrylist[1:]:
-        data += '\n' + urlproxy.get(urlroot + '/' + e.id, format="tsv").split('\n')[1]
+        data += '\r\n' + urlproxy.get(urlroot + '/' + e.id, format="tsv").split('\n')[1]
     zipfile.addfile(filename, data)
 
 
 def _f(filename, urlroot, changesetentry, refset=False):
-    return ('Refset/' if refset else 'Terminology/') + filename + 'Snapshot_INT_%s.txt', urlroot, changesetentry
+    return 'RF2Release/Snapshot/' + ('Refset/' if refset else 'Terminology/') + filename + 'Snapshot_INT_%s.txt', \
+           urlroot, changesetentry
 
-dumplist = [_f('sct2_Concept_', 'concept', 'concept'),
+dumplist = [_f('Metadata/der2_sssiiRefset_Changeset', 'changeset', None, refset=True),
+            _f('sct2_Concept_', 'concept', 'concept'),
             _f('sct2_Description_', 'description', 'description'),
             _f('sct2_Relationship_', 'relationship', 'relationship'),
             _f('sct2_StatedRelationship_', 'relationship', 'statedRelationship'),
@@ -110,12 +112,10 @@ def dump(opts, urlproxy):
                  "Unable to fetch change set")
     effectivetime = opts.effectivetime if opts.effectivetime else r.ChangeSetDetails.effectiveTime
     for e in dumplist:
-        create_zip(zipfile, e[0] % effectivetime, e[1], r.ChangeSetDetails.d[e[2]], urlproxy, opts)
+        create_zip(zipfile, e[0] % effectivetime, e[1], r.ChangeSetDetails.d[e[2]] if e[2] else [r.ChangeSetDetails],
+                   urlproxy)
 
     zipfile.writetofile('dump.zip')
-
-
-
 
 
 def main(args):
@@ -123,7 +123,7 @@ def main(args):
     """
     parser = argparse.ArgumentParser(description="Manage change sets")
     parser.add_argument('function', help="[a]dd, [m]odify, [c]ommit, [r]roolback, [q]uery, [d]ump",
-                        choices=('a','c','m', 'q', 'r', 'd'))
+                        choices=('a', 'c', 'm', 'q', 'r', 'd'))
     parser.add_argument('-u', '--url', help="RF2 Service base URL", required=True)
     parser.add_argument('-n', '--name', help="Change set name")
     parser.add_argument('-d', '--description', help="Change set description")

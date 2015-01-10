@@ -59,14 +59,14 @@ class Proxy():
         """
         return self.get('status')
 
-    def establish_changeset(self, conceptname):
-        """ Validate the changeset name or id if it was supplied, otherwise fetch a new one
-        @return:
+    def establish_changeset(self, csname):
+        """ Establish the changeset context for subsequent operations
+        :param csname: Change set name if it needs to be created.  None means use server default
         """
         if self.changeset:
             r = self.get('changeset/%s' % self.changeset)
         else:
-            r = self.post('changeset', csname="Add%s" % self._camelcase(conceptname), effectiveTime=self._effectivetime)
+            r = self.post('changeset', csname=csname, effectiveTime=self._effectivetime)
         self.changeset = r.ChangeSetReferenceSetEntry.referencedComponentId.uuid if r.ok else None
 
     def get(self, root, **args):
@@ -122,7 +122,7 @@ class Proxy():
         return rval
 
     @staticmethod
-    def _camelcase(text):
+    def camelcase(text):
         return ''.join(x.capitalize() for x in text.split(' '))
 
     def _doaccess(self, op, root, format='json', **args):
@@ -134,7 +134,7 @@ class Proxy():
         """
         try:
             response = op(self._urlfor(root, format=format), params=args)
-            return self._rslt(response) if format=="json" else response.content.decode()
+            return self._rslt(response) if format == "json" else response.content.decode()
         except requests.ConnectionError as e:
             print(str(e), file=sys.stderr)
             return self._rslt(None)

@@ -33,6 +33,7 @@ import sys
 import argparse
 
 from utils.Proxy import Proxy
+from utils import ConceptUtils
 
 
 def main(args):
@@ -48,46 +49,13 @@ def main(args):
                         default='p')
     opts = parser.parse_args(args)
 
-    # Make sure the url is valid and points at a RF2 service
-    urlproxy = Proxy(opts.url, opts.changeset, opts.effectivetime)
-    if not urlproxy.ok:
-        print("Invalid URL: %s" % opts.url, file=sys.stderr)
-        sys.exit(1)
-
-    # Make sure the parent concept is valid
-    if not urlproxy.get('concept/%s' % opts.parent).Concept.id:
-        print("Invalid parent concept: %s" % opts.parent, file=sys.stderr)
-        sys.exit(1)
-
-    # Create the FSN from the name and the base
-    fsn = opts.name + ' ' + urlproxy.get('concept/%s/base' % opts.parent).val
-
-    # Make sure FSN doesn't already exist
-    r = urlproxy.get('descriptions/', matchalgorithm='exactmatch', matchvalue=fsn, maxtoreturn=0)
-    if not r.ok:
-        sys.exit(1)
-    if int(r.DescriptionList.numEntries) > 0:
-        print("Concept with the FSN of %s already exists" % fsn, file=sys.stderr)
-        sys.exit(1)
-
-    # Make sure the name doesn't already exist
-    if not opts.override:
-        r = urlproxy.get('descriptions/', matchalgorithm='exactmatch', matchvalue=opts.name, maxtoreturn=0)
-        if not r.ok:
-            sys.exit(1)
-        if int(r.DescriptionList.numEntries) > 0:
-            print("Concept with the same name (%s) already exists - use override flag to add" % opts.name,
-                  file=sys.stderr)
-            sys.exit(1)
-
-    # Validate the changeset or create a new one if needed
-    urlproxy.establish_changeset()
-    if not urlproxy.ok:
-        print("Changeset is not valid", file=sys.stderr)
+    urlproxy, fsn = ConceptUtils.valid_concept_add(opts)
+    if not urlproxy:
+        print(fsn, out=sys.stderr)
         sys.exit(1)
 
     # Add the concept
-    r = urlproxy.post('concept', effectiveTime=effectivetime, definitionstatus=opts.conceptstatus)
+    r = urlproxy.post('concept', definitionstatus=opts.conceptstatus)
     if not r.ok:
         print("Unable to add concept", file=sys.stderr)
         sys.exit(1)
@@ -103,11 +71,13 @@ def main(args):
     if opts.description:
         r = urlproxy.post('description', concept=conceptid, term=opts.description, type='d')
         descid = r.Description.id if r.ok else None
+    else:
+        descid = None
 
     # add the parent
     r = urlproxy.post('relationship/source/%s/target/%s' % (conceptid, opts.parent))
     relid = r.Relationship.id if r.ok else None
-    if pnid and fsnid and relid (not opts.description or descid):
+    if pnid and fsnid and relid(not opts.description or descid):
         print("Concept succesfully created")
         cs = urlproxy.commit()
         if cs:

@@ -1,0 +1,71 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2014, Mayo Clinic
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+#
+# Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+#     Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#     Neither the name of the <ORGANIZATION> nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+# OF THE POSSIBILITY OF SUCH DAMAGE.
+from __future__ import print_function
+import argparse
+import sys
+
+
+from utils import ConceptUtils
+
+
+def new(opts):
+    urlproxy, fsn = ConceptUtils.valid_concept_add(opts.url, opts.changeset, opts.effectivetime, None, opts.name)
+    if not urlproxy:
+        print(fsn, file=sys.stderr)
+        sys.exit(1)
+    r = urlproxy.post('simplerefset')
+    if not r.ok:
+        print("Unable to add refset", file=sys.stderr)
+        sys.exit(1)
+    print("Simple refset %s added.  Conceptid: %s" % opts.name, r.id)
+
+def main(args):
+    """ Manage simple reference sets
+    """
+    parser = argparse.ArgumentParser(description="Manage simple reference sets")
+    parser.add_argument('function', help="[n]ew, [a]dd concepts, [r]emove concepts, [d]elete, [q]uery",
+                        choices=('n','a','r', 'd', 'q'))
+    parser.add_argument('-u', '--url', help="RF2 Service base URL", required=True)
+    parser.add_argument('-cs', '--changeset', help="Changeset name or uuid", required=True)
+    parser.add_argument('-n', '--name', help="Refset name")
+    parser.add_argument('-d', '--description', help="Refset description")
+    parser.add_argument('-e', '--effectivetime', help="Effective time of addition.  Default: today's date")
+    parser.add_argument('-cs', '--changeset', help="Changeset identifier")
+    parser.add_argument('--debug', help="Debugging", action='store_true')
+
+    opts = parser.parse_args(args)
+
+    if opts.function == 'n':
+        new(opts)
+    else:
+        print("Unrecognized function")
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
