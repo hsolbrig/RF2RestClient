@@ -32,6 +32,8 @@ import sys
 from utils.Proxy import Proxy
 from utils.InMemoryZip import InMemoryZip
 
+# Separator for dump files
+sep = '\r\n'
 
 def check_ok(response, message):
     if not response or (not isinstance(response, str) and not response.ok):
@@ -45,9 +47,9 @@ def error(message):
 
 
 def _validchangeset(opts, urlproxy, finalok=False):
-    if not opts.changeset:
-        error("Must suppy an changeset UUID or name")
-    r = check_ok(urlproxy.get('changeset/%s' % opts.changeset), "Changeset does not exist")
+    if not opts.changeset or opts.name:
+        error("Must supply a changeset UUID or name")
+    r = check_ok(urlproxy.get('changeset/'), "Changeset does not exist")
     if not finalok and int(r.ChangeSetReferenceSetEntry.isFinal):
         error("Cannot change a finalized change set")
 
@@ -86,9 +88,10 @@ def as_concept(urlproxy, cid):
 def create_zip(zipfile, filename, urlroot, entrylist, urlproxy):
     if not entrylist:
         return
-    data = urlproxy.get(urlroot + '/' + entrylist[0].id, format="tsv")
+    hdr, row1 = urlproxy.get(urlroot + '/' + entrylist[0].id, format="tsv").split('\n')
+    data = hdr + '\tchangeset\tlocked' + sep + row1 + urlproxy.changeset_info()
     for e in entrylist[1:]:
-        data += '\r\n' + urlproxy.get(urlroot + '/' + e.id, format="tsv").split('\n')[1]
+        data += sep + (urlproxy.get(urlroot + '/' + e.id, format="tsv").split('\n')[1]) + urlproxy.changeset_info()
     zipfile.addfile(filename, data)
 
 

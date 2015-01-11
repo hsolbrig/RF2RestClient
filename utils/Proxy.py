@@ -49,7 +49,7 @@ class Proxy():
         self._effectivetime = None
         r = self.server_status()
         self.rf2_release = r.val.rf2_release if r.ok else None
-        self.changeset = changeset
+        self.changeset, self.locked = changeset, 0
         self._commitRequired = changeset is None
         self._effectivetime = effectivetime if effectivetime else strftime("%Y%m%d", gmtime())
 
@@ -64,10 +64,11 @@ class Proxy():
         :param csname: Change set name if it needs to be created.  None means use server default
         """
         if self.changeset:
-            r = self.get('changeset/%s' % self.changeset)
+            r = self.get('changeset/')
         else:
-            r = self.post('changeset', csname=csname, effectiveTime=self._effectivetime)
-        self.changeset = r.ChangeSetReferenceSetEntry.referencedComponentId.uuid if r.ok else None
+            r = self.post('changeset', csname=csname)
+        self.changeset, self.locked = (r.ChangeSetReferenceSetEntry.referencedComponentId.uuid, \
+                                       1 if r.ChangeSetReferenceSetEntry.isFinal == 0 else 0) if r.ok else (None, None)
 
     def get(self, root, **args):
         if self._debugging:
@@ -124,6 +125,9 @@ class Proxy():
     @staticmethod
     def camelcase(text):
         return ''.join(x.capitalize() for x in text.split(' '))
+
+    def changeset_info(self):
+        return '\t' + str(self.changeset) + '\t' + str(self.locked)
 
     def _doaccess(self, op, root, format='json', **args):
         """ REST access with error handling

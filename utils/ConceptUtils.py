@@ -49,8 +49,10 @@ def valid_concept_add(url, changeset, effectivetime, parent, name, override=Fals
         return None, "Invalid URL: %s" % url
 
     # Make sure the parent concept is valid
-    if parent and not urlproxy.get('concept/%s' % parent).Concept.id:
-        return None, "Invalid parent concept: %s" % parent
+    if parent:
+        r = urlproxy.get('concept/%s' % parent)
+        if not r.ok:
+            return None, "Invalid parent concept: %s" % parent
 
     # Create the FSN from the name and the base
     fsn = name + ' ' + urlproxy.get('concept/%s/base' % parent).val
