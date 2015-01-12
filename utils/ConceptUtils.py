@@ -33,7 +33,7 @@ from utils.Proxy import Proxy
 """
 
 
-def valid_concept_add(url, changeset, effectivetime, parent, name, override=False):
+def valid_concept_add(url, changeset, effectivetime, parent, name, override=False, debugging=False):
     """
     :param url: URL of service
     :param changeset: Changeset name or URI.  If none, create one for this transaction
@@ -44,7 +44,7 @@ def valid_concept_add(url, changeset, effectivetime, parent, name, override=Fals
     :return: (urlproxy, fsn) or (None, error message)
     """
     # Make sure the url is valid and points at a RF2 service
-    urlproxy = Proxy(url, changeset, effectivetime)
+    urlproxy = Proxy(url, changeset, effectivetime, debugging=debugging)
     if not urlproxy.ok:
         return None, "Invalid URL: %s" % url
 
@@ -55,14 +55,15 @@ def valid_concept_add(url, changeset, effectivetime, parent, name, override=Fals
             return None, "Invalid parent concept: %s" % parent
 
     # Create the FSN from the name and the base
-    fsn = name + ' ' + urlproxy.get('concept/%s/base' % parent).val
+    fsn = (name + ' ' + urlproxy.get('concept/%s/base' % parent).val) if parent else None
 
     # Make sure FSN doesn't already exist
-    r = urlproxy.get('descriptions/', matchalgorithm='exactmatch', matchvalue=fsn, maxtoreturn=0)
-    if not r.ok:
-        return None, "Server access error"
-    if int(r.DescriptionList.numEntries) > 0:
-        return None, "Concept with the FSN of %s already exists" % fsn
+    if fsn:
+        r = urlproxy.get('descriptions/', matchalgorithm='exactmatch', matchvalue=fsn, maxtoreturn=0)
+        if not r.ok:
+            return None, "Server access error"
+        if int(r.DescriptionList.numEntries) > 0:
+            return None, "Concept with the FSN of %s already exists" % fsn
 
     # Make sure the name doesn't already exist
     if not override:

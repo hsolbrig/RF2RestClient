@@ -40,6 +40,9 @@ def check_ok(response, message):
         error(message)
     return response
 
+def check_404(response, message):
+    if response.status_code != 404:
+        error(message)
 
 def error(message):
     print(message, file=sys.stderr)
@@ -47,18 +50,21 @@ def error(message):
 
 
 def _validchangeset(opts, urlproxy, finalok=False):
-    if not opts.changeset or opts.name:
+    if not (opts.changeset or opts.name):
         error("Must supply a changeset UUID or name")
-    r = check_ok(urlproxy.get('changeset/'), "Changeset does not exist")
+    r = check_ok(urlproxy.get('changeset/%s' % (opts.changeset if opts.changeset else opts.name)),
+                 "Changeset does not exist")
     if not finalok and int(r.ChangeSetReferenceSetEntry.isFinal):
         error("Cannot change a finalized change set")
+    opts.changeset = r.ChangeSetReferenceSetEntry.referencedComponentId.uuid
+    urlproxy.changeset = opts.changeset
 
 
 def add(opts, urlproxy):
     if opts.changeset:
         error("Changeset identifier cannot be specified for a new changeset")
     if opts.name:
-        check_ok(urlproxy.get('changeset/%s' % opts.name), "Changeset named %s already exists!" % opts.name)
+        check_404(urlproxy.get('changeset/%s' % opts.name), "Changeset named %s already exists!" % opts.name)
     r = check_ok(urlproxy.post('changeset', csname=opts.name, description=opts.description, owner=opts.owner),
                  "Changeset creation failed")
     urlproxy.changeset = r.ChangeSetReferenceSetEntry.referencedComponentId.uuid
@@ -68,7 +74,7 @@ def add(opts, urlproxy):
 def rollback(opts, urlproxy):
     _validchangeset(opts, urlproxy)
     if urlproxy.rollback(force=True):
-        print("Change set successfully rolled back")
+        print("Change set %s successfully rolled back" % opts.changeset)
     else:
         print("Roll back failed")
 
@@ -88,7 +94,11 @@ def as_concept(urlproxy, cid):
 def create_zip(zipfile, filename, urlroot, entrylist, urlproxy):
     if not entrylist:
         return
-    hdr, row1 = urlproxy.get(urlroot + '/' + entrylist[0].id, format="tsv").split('\n')
+    r = urlproxy.get(urlroot + '/' + entrylist[0].referencedComponentId.uuid, format="tsv", open=True, final=True)
+    if not r.ok:
+        print("Unable to retrieve changeset by id: %s" % entrylist[0].id, file=sys.stderr)
+        sys.exit(1)
+    hdr, row1 = r.content.decode().split('\n')
     data = hdr + '\tchangeset\tlocked' + sep + row1 + urlproxy.changeset_info()
     for e in entrylist[1:]:
         data += sep + (urlproxy.get(urlroot + '/' + e.id, format="tsv").split('\n')[1]) + urlproxy.changeset_info()
@@ -109,23 +119,37 @@ dumplist = [_f('Metadata/der2_sssiiRefset_Changeset', 'changeset', None, refset=
 
 
 def dump(opts, urlproxy):
-    zipfile = InMemoryZip()
+    if not opts.target:
+        print("Target dump directory must be specified")
+        return
+    zipfile = InMemoryZip(opts.target)
     _validchangeset(opts, urlproxy, finalok=True)
     r = check_ok(urlproxy.get('changeset/%s/details' % opts.changeset, open=True, final=True),
                  "Unable to fetch change set")
     effectivetime = opts.effectivetime if opts.effectivetime else r.ChangeSetDetails.effectiveTime
     for e in dumplist:
-        create_zip(zipfile, e[0] % effectivetime, e[1], r.ChangeSetDetails.d[e[2]] if e[2] else [r.ChangeSetDetails],
-                   urlproxy)
+        if not e[2] or r.ChangeSetDetails.d.get(e[2], None):
+            create_zip(zipfile, e[0] % effectivetime, e[1], r.ChangeSetDetails.d[e[2]]
+                       if e[2] else [r.ChangeSetDetails],urlproxy)
 
-    zipfile.writetofile('dump.zip')
+    zipfile.writetofile()
+    print("Changeset %s saved in %s.zip" % (opts.changeset, opts.target))
+
+
+def modify(opts, urlproxy):
+    _validchangeset(opts, urlproxy)
+    update_args = {k: getattr(opts, k) for k in ['description', 'owner', 'effectivetime'] if getattr(opts, k)}
+    if getattr(opts, 'name'):
+        update_args['csname'] = opts.name
+    r = check_ok(urlproxy.put('changeset/%s' % opts.changeset, **update_args), "Update failed")
+    print("Changeset %s modified" % opts.changeset)
 
 
 def main(args):
     """ Query or change the state of a change set
     """
     parser = argparse.ArgumentParser(description="Manage change sets")
-    parser.add_argument('function', help="[a]dd, [m]odify, [c]ommit, [r]roolback, [q]uery, [d]ump",
+    parser.add_argument('function', help="[a]dd, [c]ommit, [m]odify, [r]ollback, [d]ump",
                         choices=('a', 'c', 'm', 'q', 'r', 'd'))
     parser.add_argument('-u', '--url', help="RF2 Service base URL", required=True)
     parser.add_argument('-n', '--name', help="Change set name")
@@ -133,6 +157,7 @@ def main(args):
     parser.add_argument('-o', '--owner', help="Change set owner")
     parser.add_argument('-e', '--effectivetime', help="Effective time of addition.  Default: today's date")
     parser.add_argument('-cs', '--changeset', help="Changeset identifier")
+    parser.add_argument('--target', help="Target dump directory")
     parser.add_argument('--debug', help="Debugging", action='store_true')
 
     opts = parser.parse_args(args)
@@ -147,7 +172,7 @@ def main(args):
     elif opts.function == 'c':
         commit(opts, urlproxy)
     elif opts.function == 'm':
-        print("Modify changeset not implemented")
+        modify(opts, urlproxy)
     elif opts.function == 'q':
         print("Query changeset not implemented")
     elif opts.function == 'r':

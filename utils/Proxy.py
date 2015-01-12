@@ -43,21 +43,12 @@ class Proxy():
         @param changeset: Name or UUID of an existing changeset or None if this is an atomic operation
         """
         self._debugging = debugging
-        self.ok = False
-        self._url = url
-        self.changeset = None
-        self._effectivetime = None
-        r = self.server_status()
+        self.ok, self._url, self.changeset, self._effectivetime = False, url, None, None
+        r = self.get('status')
         self.rf2_release = r.val.rf2_release if r.ok else None
         self.changeset, self.locked = changeset, 0
         self._commitRequired = changeset is None
         self._effectivetime = effectivetime if effectivetime else strftime("%Y%m%d", gmtime())
-
-    def server_status(self):
-        """ Fetch the status of the server, setting self.ok to true if it is there and readable
-        @return: result of status call
-        """
-        return self.get('status')
 
     def establish_changeset(self, csname):
         """ Establish the changeset context for subsequent operations
@@ -67,7 +58,7 @@ class Proxy():
             r = self.get('changeset/')
         else:
             r = self.post('changeset', csname=csname)
-        self.changeset, self.locked = (r.ChangeSetReferenceSetEntry.referencedComponentId.uuid, \
+        self.changeset, self.locked = (r.ChangeSetReferenceSetEntry.referencedComponentId.uuid,
                                        1 if r.ChangeSetReferenceSetEntry.isFinal == 0 else 0) if r.ok else (None, None)
 
     def get(self, root, **args):
@@ -93,7 +84,7 @@ class Proxy():
             return r
         except requests.ConnectionError as e:
             print(e.strerror, file=sys.stderr)
-        return JSONWrapper(None)
+        return JSONWrapper(None, 200)
 
     def commit(self, force=False):
         """ Commit the changeset if we're doing a one shot
@@ -110,18 +101,6 @@ class Proxy():
             return self.delete('changeset/%s' % self.changeset)
             # TODO manually undo the changes if we can't use the rollback mechanism
 
-    def _urlfor(self, root, format='json'):
-        """ URL constructor
-        @param root: base URL
-        @return:
-        """
-        rval = self._url + '/' + root + "?format=" + format + \
-               (('&effectiveTime=%s' % self._effectivetime) if self._effectivetime else '') + \
-            (('&changeset=%s' % self.changeset) if self.changeset else '')
-        if self._debugging:
-            print(rval)
-        return rval
-
     @staticmethod
     def camelcase(text):
         return ''.join(x.capitalize() for x in text.split(' '))
@@ -129,30 +108,53 @@ class Proxy():
     def changeset_info(self):
         return '\t' + str(self.changeset) + '\t' + str(self.locked)
 
+    def _urlfor(self, root, format_='json', parms=None):
+        """ URL constructor
+        @param root: base URL
+        @param format_: return format
+        @return:
+        """
+        rval = self._url + '/' + root + "?format=" + format_ + \
+               (('&effectiveTime=%s' % self._effectivetime) if self._effectivetime else '') + \
+            (('&changeset=%s' % self.changeset) if self.changeset else '')
+        if self._debugging:
+            print(rval + '&' + ('&'.join('%s=%s' % (k, ' '.join(v) if isinstance(v, list) else v)
+                                         for k, v in (parms.items() if parms else {}))))
+        return rval
+
     def _doaccess(self, op, root, format='json', **args):
         """ REST access with error handling
         @param op: requests function to invoke
         @param root: root URL
+        @param format_:  expected return format
         @param args: arguments to add to line
         @return: JSON wrapper
         """
         try:
-            response = op(self._urlfor(root, format=format), params=args)
-            return self._rslt(response) if format == "json" else response.content.decode()
+            response = op(self._urlfor(root, format_=format, parms=args), params=args)
+            if self._debugging:
+                print("%s: %s" % (response.status_code, response.reason))
+            return self._rslt(response) if format == "json" else response
         except requests.ConnectionError as e:
             print(str(e), file=sys.stderr)
             return self._rslt(None)
 
-    def _rslt(self, data):
+    def _rslt(self, response):
         """ Evaluate the response data
-        @param data: http response
+        @param response: http response
         @return: python wrapper for resulting data or None if an error ocurred
         """
-        if data is not None and not data.ok:
-            if self._debugging:
-                print("Error %s: %s" % (data.status_code, data.reason), file=sys.stderr)
+        if not response or not response.ok:
+            self.ok = False
             data = None
-        elif self._debugging:
-            print("OK: %s" % data.status_code)
-        self.ok = data and data.ok
-        return JSONWrapper(data, debugging=self._debugging)
+            if self._debugging:
+                print("No response" if not response else "%s: %s" % (response.status_code, response.reason),
+                      file=sys.stderr)
+                if response is not None:
+                    print(response.content.decode())
+        else:
+            self.ok = True
+            data = response.json()
+            if self._debugging:
+                print("%s: %s" % (response.status_code, response.reason))
+        return JSONWrapper(data, response.status_code if response else 404)

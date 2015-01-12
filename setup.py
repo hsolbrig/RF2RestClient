@@ -8,5 +8,6 @@ setup(
     license='',
     author='Harold Solbrig',
     author_email='solbrig.harold@mayo.edu',
-    description='REST Client for SNOMED CT RF2 Datastore'
+    description='REST Client for SNOMED CT RF2 Datastore',
+    requires=['requests']
 )

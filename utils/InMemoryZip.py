@@ -31,12 +31,13 @@ from io import BytesIO
 
 
 class InMemoryZip(object):
-    def __init__(self):
+    def __init__(self, target):
         self.in_memory_zip = BytesIO()
+        self._target = target
 
     def addfile(self, filename, file_contents):
         zf = zipfile.ZipFile(self.in_memory_zip, "a", zipfile.ZIP_DEFLATED, False)
-        zf.writestr(filename, file_contents)
+        zf.writestr(self._target + '/' + filename, file_contents)
         # Mark the files as having been created on Windows so that
         # Unix permissions are not inferred as 0000
         for zfile in zf.filelist:
@@ -47,15 +48,14 @@ class InMemoryZip(object):
         self.in_memory_zip.seek(0)
         return self.in_memory_zip.read()
 
-    def writetofile(self, filename):
-        ''' Writes the in-memory zip to a file. '''
-        with open(filename, 'wb') as f:
+    def writetofile(self):
+        """ Writes the in-memory zip to a file. """
+        with open(self._target + '.zip', 'wb') as f:
             f.write(self.read())
-
 
 
 if __name__ == "__main__":
     # Run a test
-    imz = InMemoryZip()
-    imz.append("test.txt", "t1\tt2\tt3\t\na\tb\tc\t").append("test2.txt", "Still another")
-    imz.writetofile("test.zip")
+    imz = InMemoryZip('TEST')
+    imz.addfile("test.txt", "t1\tt2\tt3\t\na\tb\tc\t").addfile("test2.txt", "Still another")
+    imz.writetofile()

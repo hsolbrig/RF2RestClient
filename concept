@@ -34,6 +34,8 @@ import argparse
 
 from utils import ConceptUtils
 
+simplerefset_parent = "446609009"   # Parent concept for simple refsets
+
 
 def main(args):
     parser = argparse.ArgumentParser(description="Add a new concept to a RF2 database")
@@ -46,10 +48,14 @@ def main(args):
     parser.add_argument('-o', '--override', help="Ignore existing concept with the same name", action='store_true')
     parser.add_argument('-s', '--conceptstatus', help="Primitive(p) or fully defined (f)", choices=('f', 'p'),
                         default='p')
+    parser.add_argument('--debug', help="Print debug trace", action="store_true")
     opts = parser.parse_args(args)
 
+    if opts.parent in ("srs","simplerefset"):
+        opts.parent = simplerefset_parent
+
     urlproxy, fsn = ConceptUtils.valid_concept_add(opts.url, opts.changeset, opts.effectivetime, opts.parent,
-                                                   opts.name, opts.override)
+                                                   opts.name, override=opts.override, debugging=opts.debug)
     if not urlproxy:
         print(fsn, file=sys.stderr)
         sys.exit(1)
@@ -78,7 +84,7 @@ def main(args):
     r = urlproxy.post('relationship/source/%s/target/%s' % (conceptid, opts.parent))
     relid = r.Relationship.id if r.ok else None
     if pnid and fsnid and relid and (not opts.description or descid):
-        print("Concept succesfully created")
+        print("Concept %s succesfully created" % conceptid)
         cs = urlproxy.commit()
         if cs:
             print("Changeset: %s committed" % cs, file=sys.stderr)

@@ -30,39 +30,47 @@ from __future__ import print_function
 import argparse
 import sys
 
+from utils.Proxy import Proxy
 
-from utils import ConceptUtils
 
+def do_op(opts, operation):
+    # Make sure the url is valid and points at a RF2 service
+    urlproxy = Proxy(opts.url, opts.changeset, opts.effectivetime, debugging=opts.debug)
+    if not urlproxy.ok:
+        return None, "Invalid URL: %s" % opts.url
+    r = urlproxy.put('simplerefset/%s' % opts.refset, operation=operation, component=opts.concept,
+                     leafonly=1 if opts.leaves else 0, children=1 if opts.descendants else 0)
+    print("Concept(s) added to refset" if r.ok else "Add was not successful")
 
-def new(opts):
-    urlproxy, fsn = ConceptUtils.valid_concept_add(opts.url, opts.changeset, opts.effectivetime, None, opts.name)
-    if not urlproxy:
-        print(fsn, file=sys.stderr)
-        sys.exit(1)
-    r = urlproxy.post('simplerefset')
-    if not r.ok:
-        print("Unable to add refset", file=sys.stderr)
-        sys.exit(1)
-    print("Simple refset %s added.  Conceptid: %s" % opts.name, r.id)
 
 def main(args):
-    """ Manage simple reference sets
+    """ Manage simple reference sets.  Use concept management for the reference set itself
     """
     parser = argparse.ArgumentParser(description="Manage simple reference sets")
-    parser.add_argument('function', help="[n]ew, [a]dd concepts, [r]emove concepts, [d]elete, [q]uery",
-                        choices=('n','a','r', 'd', 'q'))
+    parser.add_argument('function', help="[a]dd concepts, [r]emove concepts, [c]lear - remove all concepts, "
+                                         "[u]pdate - replace concepts with new set \n"
+                                         "Note: use 'concept a -p srs ...' to create the reference set itself",
+                        choices=('a', 'r', 'c',  'u'))
     parser.add_argument('-u', '--url', help="RF2 Service base URL", required=True)
+    parser.add_argument('-r', '--refset', help="SCTID of simple refset", required=True)
     parser.add_argument('-cs', '--changeset', help="Changeset name or uuid", required=True)
-    parser.add_argument('-n', '--name', help="Refset name")
-    parser.add_argument('-d', '--description', help="Refset description")
+    parser.add_argument('-c', '--concept', help="Concept(s) to add or remove", nargs='*')
     parser.add_argument('-e', '--effectivetime', help="Effective time of addition.  Default: today's date")
-    parser.add_argument('-cs', '--changeset', help="Changeset identifier")
+    parser.add_argument('--descendants', help="Add or remove concept descendants rather than concept itself",
+                        action="store_true")
+    parser.add_argument('--leaves', help="Add or remove most distal concept descendants rather than concept itself",
+                        action="store_true")
     parser.add_argument('--debug', help="Debugging", action='store_true')
 
     opts = parser.parse_args(args)
-
-    if opts.function == 'n':
-        new(opts)
+    if opts.function == 'a':
+        do_op(opts, "add")
+    elif opts.function == 'r':
+        do_op(opts, "remove")
+    elif opts.function == 'c':
+        if opts.concept:
+            print("Concept cannot be supplied for clear operation")
+        do_op(opts, "remove")
     else:
         print("Unrecognized function")
 

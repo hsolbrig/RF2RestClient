@@ -26,19 +26,20 @@
 # LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import sys
 from utils.Struct import Struct
 
 
 class JSONWrapper(Struct):
     """ Wraper for JSON encoded data
     """
-    def __init__(self, data, debugging=False):
+    def __init__(self, data, status_code, debugging=False):
         """ Turn an http response into python, setting an ok flag in the process
-        @param data: http response
+        @param data: server response data
         """
-        if data and data.ok:
-            Struct.__init__(self, debugging=debugging, **(data.json()))
-            self.ok = True
-        else:
-            self.ok = False
+        self.ok = bool(data)
+        self.status_code = status_code
+        if self.ok:
+            Struct.__init__(self, debugging=debugging, **data)
+        elif debugging:
+            print("Empty response", file=sys.stderr)
