@@ -91,7 +91,7 @@ def as_concept(urlproxy, cid):
     return urlproxy.get('concept/%s' % cid, format="tsv")
 
 
-def create_zip(zipfile, filename, urlroot, entrylist, urlproxy):
+def create_zip(zipfile, filename, urlroot, entrylist, urlproxy, cannonical):
     if not entrylist:
         return
     r = urlproxy.get(urlroot + '/' + entrylist[0].id, format="tsv", open=True, final=True)
@@ -99,28 +99,33 @@ def create_zip(zipfile, filename, urlroot, entrylist, urlproxy):
         print("Unable to retrieve changeset by id: %s" % entrylist[0].id, file=sys.stderr)
         sys.exit(1)
     hdr, row1 = r.content.decode().split('\n')
-    data = hdr + '\tchangeset\tlocked' + sep + row1 + urlproxy.changeset_info()
+    data = hdr + ('\tchangeset\tlocked' if not cannonical else '') + sep + row1 + urlproxy.changeset_info()
     for e in entrylist[1:]:
         r = (urlproxy.get(urlroot + '/' + e.id, format="tsv"))
         if r.ok:
-            data += sep + r.content.decode().split('\n')[1] + urlproxy.changeset_info()
+            data += sep + r.content.decode().split('\n')[1] + (urlproxy.changeset_info() if not cannonical else '')
         else:
             print("Unable to read %s id %s" % (urlroot, e.id), file=sys.stderr)
             sys.exit(1)
     zipfile.addfile(filename, data)
 
 
-def _f(filename, urlroot, changesetentry, refset=False):
-    return 'RF2Release/Snapshot/' + ('Refset/' if refset else 'Terminology/') + filename + 'Snapshot_INT_%s.txt', \
-           urlroot, changesetentry
+class DLE():
 
-dumplist = [_f('Metadata/der2_sssiiRefset_Changeset', 'changeset', None, refset=True),
-            _f('sct2_Concept_', 'concept', 'concept'),
-            _f('sct2_Description_', 'description', 'description'),
-            _f('sct2_Relationship_', 'relationship', 'relationship'),
-            _f('sct2_StatedRelationship_', 'relationship', 'statedRelationship'),
-            _f('Language/der2_cRefset_Language', 'language',  'language', refset=True),
-            _f('Metadata/der2_ssRefset_ModuleDependency', 'moduledependency', 'moduleDependency', refset=True)]
+    def __init__(self, filename, urlroot, changesetentry, refset=False):
+        self.filename = 'RF2Release/Snapshot/' + ('Refset/' if refset else 'Terminology/') + \
+                        filename + 'Snapshot_INT_%s.txt'
+        self.urlroot = urlroot
+        self.changesetentry = changesetentry
+
+
+dumplist = [DLE('Metadata/der2_sssiiRefset_Changeset', 'changeset', None, refset=True),
+            DLE('sct2_Concept_', 'concept', 'concept'),
+            DLE('sct2_Description_', 'description', 'description'),
+            DLE('sct2_Relationship_', 'relationship', 'relationship'),
+            DLE('sct2_StatedRelationship_', 'relationship', 'statedRelationship'),
+            DLE('Language/der2_cRefset_Language', 'language',  'language', refset=True),
+            DLE('Metadata/der2_ssRefset_ModuleDependency', 'moduledependency', 'moduleDependency', refset=True)]
 
 
 def dump(opts, urlproxy):
@@ -132,10 +137,11 @@ def dump(opts, urlproxy):
     r = check_ok(urlproxy.get('changeset/%s/details' % opts.changeset, open=True, final=True),
                  "Unable to fetch change set")
     effectivetime = opts.effectivetime if opts.effectivetime else r.ChangeSetDetails.effectiveTime
-    for e in dumplist:
-        if not e[2] or r.ChangeSetDetails.d.get(e[2], None):
-            create_zip(zipfile, e[0] % effectivetime, e[1], r.ChangeSetDetails.d[e[2]]
-                       if e[2] else [r.ChangeSetDetails],urlproxy)
+    for dle in dumplist:
+        if not dle.changesetentry or (not opts.cannonical and r.ChangeSetDetails.d.get(dle.changesetentry, None)):
+            create_zip(zipfile, dle.filename % effectivetime, dle.urlroot,
+                       r.ChangeSetDetails.d[dle.changesetentry] if dle.changesetentry
+                       else [r.ChangeSetDetails], urlproxy, opts.cannonical)
 
     zipfile.writetofile()
     print("Changeset %s saved in %s.zip" % (opts.changeset, opts.target))
@@ -161,6 +167,8 @@ def main(args):
     parser.add_argument('-d', '--description', help="Change set description")
     parser.add_argument('-o', '--owner', help="Change set owner")
     parser.add_argument('-e', '--effectivetime', help="Effective time of addition.  Default: today's date")
+    parser.add_argument('-c', '--cannonical', help="Cannonical RF2 dump -- don't add changeset fields, etc",
+                        action="store_true")
     parser.add_argument('-cs', '--changeset', help="Changeset identifier")
     parser.add_argument('--target', help="Target dump directory")
     parser.add_argument('--debug', help="Debugging", action='store_true')

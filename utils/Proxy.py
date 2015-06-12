@@ -33,7 +33,7 @@ from time import gmtime, strftime
 from utils.JSONWrapper import JSONWrapper
 
 
-class Proxy():
+class Proxy:
     """ REST proxy for RF2 Changesets
     """
 
@@ -114,8 +114,8 @@ class Proxy():
         @param format_: return format
         @return:
         """
-        rval = self._url + '/' + root + "?format=" + format_ + \
-               (('&effectiveTime=%s' % self._effectivetime) if self._effectivetime else '') + \
+        rval = self._url + '/' + root + "?bypass=1&format=" + format_ + \
+            (('&effectiveTime=%s' % self._effectivetime) if self._effectivetime else '') + \
             (('&changeset=%s' % self.changeset) if self.changeset else '')
         if self._debugging:
             print(rval + '&' + ('&'.join('%s=%s' % (k, ' '.join(v) if isinstance(v, list) else v)
