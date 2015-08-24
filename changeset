@@ -100,9 +100,12 @@ def as_concept(urlproxy, cid):
 def create_zip(zipfile, filename, urlroot, entrylist, urlproxy, cannonical):
     if not entrylist:
         return
-    r = urlproxy.get(urlroot + '/' + entrylist[0].id, format="tsv", open=True, final=True)
+    elif not isinstance(entrylist, list):
+        entrylist = [entrylist]
+    csid = entrylist[0].id
+    r = urlproxy.get(urlroot + '/' + csid, format="tsv", open=True, final=True)
     if not r.ok:
-        print("Unable to retrieve changeset by id: %s" % entrylist[0].id, file=sys.stderr)
+        print("Unable to retrieve changeset by id: %s" % csid, file=sys.stderr)
         sys.exit(1)
     hdr, row1 = r.content.decode().split('\n')
     data = hdr + ('\tchangeset\tlocked' if not cannonical else '') + sep + row1 + urlproxy.changeset_info()
