@@ -41,7 +41,8 @@ def main(args):
     parser = argparse.ArgumentParser(description="Add a new concept to a RF2 database")
     parser.add_argument('-u', '--url', help="RF2 Service base URL")
     parser.add_argument('-n', '--name', help="Concept name", required=True)
-    parser.add_argument('-p', '--parent', help="Parent concept id", required=True)
+    parser.add_argument('-p', '--parent', help="Parent concept id. ('srs' or 'simplerefset' means "
+                                               "concept is a simple refset)", required=True)
     parser.add_argument('-d', '--description', help="Concept description")
     parser.add_argument('-c', '--changeset', help="Changeset identifier. Default: assign new identifier")
     parser.add_argument('-e', '--effectivetime', help="Effective time of addition.  Default: today's date")
@@ -51,7 +52,7 @@ def main(args):
     parser.add_argument('--debug', help="Print debug trace", action="store_true")
     opts = parser.parse_args(args)
 
-    if opts.parent in ("srs","simplerefset"):
+    if opts.parent in ("srs", "simplerefset"):
         opts.parent = simplerefset_parent
 
     urlproxy, fsn = ConceptUtils.valid_concept_add(opts.url, opts.changeset, opts.effectivetime, opts.parent,
@@ -84,7 +85,7 @@ def main(args):
     r = urlproxy.post('relationship/source/%s/target/%s' % (conceptid, opts.parent))
     relid = r.Relationship.id if r.ok else None
     if pnid and fsnid and relid and (not opts.description or descid):
-        print("Concept %s succesfully created" % conceptid)
+        print("Concept %s successfully created" % conceptid)
         cs = urlproxy.commit()
         if cs:
             print("Changeset: %s committed" % cs, file=sys.stderr)
