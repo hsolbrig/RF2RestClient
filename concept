@@ -86,9 +86,8 @@ def main(args):
     relid = r.Relationship.id if r.ok else None
     if pnid and fsnid and relid and (not opts.description or descid):
         print("Concept %s successfully created" % conceptid)
-        cs = urlproxy.commit()
-        if cs:
-            print("Changeset: %s committed" % cs, file=sys.stderr)
+        if urlproxy.commit():
+            print("Changeset: %s committed" % urlproxy.changeset, file=sys.stderr)
     else:
         urlproxy.rollback()
         if not pnid:
