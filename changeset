@@ -28,6 +28,7 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 import argparse
 import sys
+import re
 
 from utils.Proxy import Proxy
 from utils.InMemoryZip import InMemoryZip
@@ -35,14 +36,17 @@ from utils.InMemoryZip import InMemoryZip
 # Separator for dump files
 sep = '\r\n'
 
+
 def check_ok(response, message):
     if not response or (not isinstance(response, str) and not response.ok):
         error(message)
     return response
 
+
 def check_404(response, message):
     if response.status_code != 404:
         error(message)
+
 
 def error(message):
     print(message, file=sys.stderr)
@@ -52,6 +56,8 @@ def error(message):
 def _validchangeset(opts, urlproxy, finalok=False):
     if not (opts.changeset or opts.name):
         error("Must supply a changeset UUID or name")
+    if opts.name and not re.match(r'[A-Za-z0-9_]+$', opts.name):
+        error("Change set name must not contain spaces or punctuation characters")
     r = check_ok(urlproxy.get('changeset/%s' % (opts.changeset if opts.changeset else opts.name)),
                  "Changeset does not exist")
     if not finalok and int(r.ChangeSetReferenceSetEntry.isFinal):
@@ -110,7 +116,7 @@ def create_zip(zipfile, filename, urlroot, entrylist, urlproxy, cannonical):
     zipfile.addfile(filename, data)
 
 
-class DLE():
+class DLE:
 
     def __init__(self, filename, urlroot, changesetentry, refset=False):
         self.filename = 'RF2Release/Snapshot/' + ('Refset/' if refset else 'Terminology/') + \
@@ -152,7 +158,7 @@ def modify(opts, urlproxy):
     update_args = {k: getattr(opts, k) for k in ['description', 'owner', 'effectivetime'] if getattr(opts, k)}
     if getattr(opts, 'name'):
         update_args['csname'] = opts.name
-    r = check_ok(urlproxy.put('changeset/%s' % opts.changeset, **update_args), "Update failed")
+    check_ok(urlproxy.put('changeset/%s' % opts.changeset, **update_args), "Update failed")
     print("Changeset %s modified" % opts.changeset)
 
 
