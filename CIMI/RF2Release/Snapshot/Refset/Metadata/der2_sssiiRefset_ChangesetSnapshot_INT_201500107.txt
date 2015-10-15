@@ -1,0 +1,2 @@
+id	effectiveTime	active	moduleId	refsetId	referencedComponentId	name	owner	changeDescription	isFinal	inRelease	changeset	locked
+ed1175aa-8dce-49ca-9a4d-70da498a7b05	20150107	1	11000160102	21000160106	edd9af0f-089e-46ce-9957-d4e2dbd7dfa6	CIMIModule	CIMI	CIMI Extension	1	None	edd9af0f-089e-46ce-9957-d4e2dbd7dfa6	0
